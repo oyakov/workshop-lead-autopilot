@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="Workshop — Lead-to-CRM Autopilot", lifespan=lifespan)
+app = FastAPI(title="Lead-to-CRM Autopilot", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
