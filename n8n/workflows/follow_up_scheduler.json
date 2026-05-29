@@ -1,0 +1,31 @@
+{
+  "name": "Lead Autopilot — Follow-up Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      },
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "id": "schedule-followup"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.APP_BASE_URL }}/api/v1/webhooks/n8n/followup-trigger",
+        "options": {}
+      },
+      "name": "Trigger Follow-ups",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "id": "http-followup"
+    }
+  ],
+  "connections": {
+    "Every Hour": { "main": [[{ "node": "Trigger Follow-ups", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "lead-autopilot" }]
+}

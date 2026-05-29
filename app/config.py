@@ -1,0 +1,104 @@
+"""
+Central configuration via pydantic-settings.
+All values read from environment / .env file.
+"""
+from __future__ import annotations
+
+import os
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # ── App ──────────────────────────────────────────────
+    agency_name: str = "Workshop"
+    environment: Literal["development", "production"] = "development"
+    secret_key: str = "change-me-in-production"
+
+    # ── Supabase ─────────────────────────────────────────
+    supabase_url: str = ""
+    supabase_key: str = ""   # service_role key
+
+    # ── LLM Primary ──────────────────────────────────────
+    llm_provider: Literal["gemini", "lmstudio", "openai"] = "lmstudio"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash-lite"
+
+    # ── LLM Fallback ─────────────────────────────────────
+    llm_fallback_provider: str = ""   # "" = disabled
+    llm_base_url: str = "http://localhost:1234/v1"
+    llm_api_key: str = "lm-studio"
+    llm_model: str = "google/gemma-3-4b"
+
+    # ── CRM ──────────────────────────────────────────────
+    crm_provider: Literal["hubspot", "pipedrive", "amocrm", "none"] = "hubspot"
+    hubspot_token: str = ""
+    pipedrive_api_key: str = ""
+    pipedrive_company_domain: str = ""
+    amocrm_subdomain: str = ""
+    amocrm_token: str = ""
+
+    # ── Email Intake (IMAP) ───────────────────────────────
+    imap_enabled: bool = False
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+    imap_user: str = ""
+    imap_password: str = ""
+    imap_folder: str = "INBOX"
+    imap_poll_interval_seconds: int = 60
+
+    # ── Email Sending (SMTP) ──────────────────────────────
+    smtp_enabled: bool = False
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+
+    # ── Follow-up ─────────────────────────────────────────
+    followup_auto_send: bool = True
+    sla_hours: int = 24
+    followup_client_hours: int = 48
+
+    # ── Telegram ─────────────────────────────────────────
+    telegram_enabled: bool = False
+    telegram_bot_token: str = ""
+    telegram_chat_ids: str = ""   # comma-separated
+
+    @property
+    def telegram_chat_id_list(self) -> list[int]:
+        if not self.telegram_chat_ids:
+            return []
+        return [int(cid.strip()) for cid in self.telegram_chat_ids.split(",") if cid.strip()]
+
+    # ── Owners ───────────────────────────────────────────
+    owners: str = "oleg@workshop.ai"   # comma-separated
+
+    @property
+    def owner_list(self) -> list[str]:
+        return [o.strip() for o in self.owners.split(",") if o.strip()]
+
+    # ── n8n ──────────────────────────────────────────────
+    n8n_webhook_base_url: str = "http://n8n:5678"
+    n8n_user: str = "admin"
+    n8n_password: str = "changeme"
+
+    # ── Scoring ───────────────────────────────────────────
+    scoring_enabled: bool = True
+    score_hot_threshold: int = 70
+    score_warm_threshold: int = 40
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()

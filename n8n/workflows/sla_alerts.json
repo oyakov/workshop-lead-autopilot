@@ -1,0 +1,44 @@
+{
+  "name": "Lead Autopilot — SLA & Follow-up Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] }
+      },
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "id": "schedule-sla"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.APP_BASE_URL }}/api/v1/webhooks/n8n/sla-check",
+        "options": {}
+      },
+      "name": "SLA Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300],
+      "id": "http-sla"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{ $json.breached }}", "operation": "larger", "value2": 0 }]
+        }
+      },
+      "name": "Any Breached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "id": "if-breached"
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": { "main": [[{ "node": "SLA Check", "type": "main", "index": 0 }]] },
+    "SLA Check": { "main": [[{ "node": "Any Breached?", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "lead-autopilot" }]
+}
