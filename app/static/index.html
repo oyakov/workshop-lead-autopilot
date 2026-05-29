@@ -998,7 +998,7 @@
 
         container.innerHTML = leads.map(l => {
           const scoreClass = getScoreClass(l.score);
-          const scoreCategory = l.score >= 70 ? 'HOT' : (l.score >= 40 ? 'WARM' : 'COLD');
+          const scoreCategory = (l.score_label || (l.score >= 70 ? 'hot' : l.score >= 40 ? 'warm' : 'cold')).toUpperCase();
           
           return `
             <div class="lead-card ${l.lead_id === selectedLead ? 'active' : ''}" onclick="selectLead('${l.lead_id}')">
@@ -1058,7 +1058,7 @@
         }
 
         const scoreClass = getScoreClass(lead.score);
-        const scoreCategory = lead.score >= 70 ? 'HOT' : (lead.score >= 40 ? 'WARM' : 'COLD');
+        const scoreCategory = (lead.score_label || (lead.score >= 70 ? 'hot' : lead.score >= 40 ? 'warm' : 'cold')).toUpperCase();
         
         document.getElementById('detail-score-wrapper').innerHTML = `
           <span class="score-badge ${scoreClass}" style="font-size: 13px; padding: 4px 10px;">${lead.score} / ${scoreCategory}</span>

@@ -54,9 +54,8 @@ async def score_lead(lead: dict) -> tuple[int, str, str]:
         if json_match:
             data = json.loads(json_match.group())
             score = max(0, min(100, int(data.get("score", 0))))
-            label = data.get("label", "cold")
-            if label not in ("hot", "warm", "cold"):
-                label = _score_to_label(score)
+            # Always derive label from score — LLM labels can be inconsistent with the score value
+            label = _score_to_label(score)
             reason = data.get("reason", "")
             return score, label, reason
 

@@ -1,0 +1,14 @@
+# Caddyfile — Production Reverse Proxy with automatic HTTPS/SSL
+
+# Lead-Autopilot App Dashboard & API
+vestint.duckdns.org {
+    # Proxy API and frontend static files to FastAPI
+    reverse_proxy localhost:8080
+}
+
+# n8n webhook and workflow editor
+vestint-n8n.duckdns.org {
+    reverse_proxy localhost:5678
+}
+
+
