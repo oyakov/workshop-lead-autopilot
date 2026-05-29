@@ -151,6 +151,29 @@ async def approve_and_send(lead_id: str) -> bool:
         "subject": lead.get("draft_subject", "")[:80],
     })
 
+    # Synchronize contacted state and email activity to CRM
+    crm_contact_id = lead.get("crm_contact_id")
+    if crm_contact_id:
+        from app.crm.factory import get_crm_adapter
+        crm = get_crm_adapter()
+        if crm.is_configured():
+            try:
+                # Update contact status to CONNECTED
+                await crm.update_contact_status(crm_contact_id, "contacted")
+                # Log outgoing email activity to populate "Last Contacted" date
+                await crm.log_outgoing_email(
+                    contact_id=crm_contact_id,
+                    subject=lead.get("draft_subject", "Re: Inquiry"),
+                    body=lead.get("draft_body", ""),
+                )
+                await events_repo.log_event(lead_id, "crm_sync_contacted", {
+                    "contact_id": crm_contact_id,
+                    "lead_status": "CONNECTED",
+                    "email_logged": True,
+                })
+            except Exception as e:
+                logger.error("CRM contacted sync failed for lead %s: %s", lead_id, e)
+
     cfg = get_settings()
     if cfg.smtp_enabled:
         try:

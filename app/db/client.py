@@ -10,13 +10,19 @@ from supabase import AClient as AsyncClient, acreate_client
 
 from app.config import get_settings
 
+import logging
+
+logger = logging.getLogger(__name__)
 _client: AsyncClient | None = None
 
 
-async def get_supabase() -> AsyncClient:
-    """Return a cached async Supabase client."""
+async def get_supabase() -> AsyncClient | None:
+    """Return a cached async Supabase client, or None if credentials are missing."""
     global _client
     if _client is None:
         cfg = get_settings()
+        if not cfg.supabase_url or not cfg.supabase_key:
+            logger.warning("SUPABASE_URL or SUPABASE_KEY missing in .env! Falling back to dynamic local in-memory store.")
+            return None
         _client = await acreate_client(cfg.supabase_url, cfg.supabase_key)
     return _client

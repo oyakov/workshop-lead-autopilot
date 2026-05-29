@@ -835,6 +835,31 @@
           </div>
         </div>
       </div>
+
+      <div style="margin-top: 24px;">
+        <h2 class="section-title" style="margin-bottom: 10px;">E2E B2B Test Scenarios</h2>
+        <div class="form-card" style="padding: 18px; display: flex; flex-direction: column; gap: 10px;">
+          <button class="btn btn-sm btn-green" style="width: 100%; justify-content: flex-start; text-align: left;" onclick="loadScenario('hot')">
+            🔥 Scenario A: Enterprise Hot Lead
+          </button>
+          <button class="btn btn-sm btn-orange" style="width: 100%; justify-content: flex-start; text-align: left; background: rgba(56, 189, 248, 0.1); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);" onclick="loadScenario('cold')">
+            🧊 Scenario B: Low-Value / Spam
+          </button>
+          <button class="btn btn-sm btn-orange" style="width: 100%; justify-content: flex-start; text-align: left;" onclick="loadScenario('sla')">
+            ⏰ Scenario C: Trigger SLA Warning
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-top: 24px; margin-bottom: 20px;">
+        <h2 class="section-title" style="margin-bottom: 10px;">B2B Connection Matrix</h2>
+        <div class="form-card" style="padding: 16px; font-size: 11px; display: grid; grid-template-columns: 1fr; gap: 8px;" id="matrix-grid">
+          <div style="display:flex; align-items:center; gap:6px;"><span class="spinner" style="width:10px; height:10px;"></span> Supabase</div>
+          <div style="display:flex; align-items:center; gap:6px;"><span class="spinner" style="width:10px; height:10px;"></span> Gemini API</div>
+          <div style="display:flex; align-items:center; gap:6px;"><span class="spinner" style="width:10px; height:10px;"></span> HubSpot CRM</div>
+          <div style="display:flex; align-items:center; gap:6px;"><span class="spinner" style="width:10px; height:10px;"></span> Telegram Bot</div>
+        </div>
+      </div>
     </aside>
 
     <!-- RIGHT MAIN: Pipeline Dashboard -->
@@ -1182,9 +1207,70 @@
       setTimeout(() => t.style.display = 'none', 4000);
     }
 
+    function loadScenario(type) {
+      if (type === 'hot') {
+        document.getElementById('f-fname').value = "Oleg";
+        document.getElementById('f-lname').value = "Petrov";
+        document.getElementById('f-email').value = "oleg@tech-agency.com";
+        document.getElementById('f-phone').value = "+1 415 555 2671";
+        document.getElementById('f-company').value = "Tech Agency Inc.";
+        document.getElementById('f-inquiry').value = "We are struggling with slow follow-ups. We lose about $30,000 in monthly revenue because inbound leads are left unanswered for 48 hours. We use HubSpot. Can you integrate an automated response drafter and alert dashboard E2E?";
+        showToast('Enterprise Hot Lead Scenario Loaded! Press Ingest to test.');
+      } else if (type === 'cold') {
+        document.getElementById('f-fname').value = "Spammer";
+        document.getElementById('f-lname').value = "Freebie";
+        document.getElementById('f-email').value = "spammer123@gmail.com";
+        document.getElementById('f-phone').value = "+381 00 000";
+        document.getElementById('f-company').value = "Personal Project";
+        document.getElementById('f-inquiry').value = "can you build me a website for free? i have no budget but i can give you good reviews online if you do it for free. send me python code too.";
+        showToast('Spam / Low-Value Lead Scenario Loaded! Press Ingest to test.');
+      } else if (type === 'sla') {
+        document.getElementById('f-fname').value = "Escalation";
+        document.getElementById('f-lname').value = "Test";
+        document.getElementById('f-email').value = "escalate@acme-corp.com";
+        document.getElementById('f-phone').value = "+1 202 555 0143";
+        document.getElementById('f-company').value = "Acme Corp";
+        document.getElementById('f-inquiry').value = "Need immediate pricing and quote for workflow setup. This requires fast response.";
+        showToast('SLA Escalation Scenario Loaded! Ingest lead first, then use SLA Breach button.');
+      }
+    }
+
+    async function updateHealthMatrix() {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        const dbStatus = data.supabase === 'connected' ? '🟢 Supabase (Cloud)' : '🟡 Supabase (In-Memory Fallback)';
+        const crmStatus = data.crm !== 'none' ? `🟢 CRM (${data.crm.toUpperCase()})` : '⚪ CRM (Disabled)';
+        const geminiStatus = data.gemini ? '🟢 Gemini API (Active)' : '⚪ Gemini API (Disabled)';
+        const fallbackStatus = data.fallback_llm !== 'none' ? `🟢 Fallback (${data.fallback_llm.toUpperCase()})` : '⚪ Fallback (None)';
+        const imapStatus = data.imap ? '🟢 Email Intake (Active)' : '⚪ Email Intake (Inactive)';
+        const smtpStatus = data.smtp ? '🟢 SMTP Email (Active)' : '⚪ SMTP (Disabled)';
+        const telegramStatus = data.telegram ? '🟢 Telegram Alerts (Active)' : '⚪ Telegram (Disabled)';
+        const scoringStatus = data.scoring ? '🟢 AI Scoring (Active)' : '⚪ AI Scoring (Disabled)';
+
+        const matrix = document.getElementById('matrix-grid');
+        matrix.innerHTML = `
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${dbStatus}</div>
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${crmStatus}</div>
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${geminiStatus}</div>
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${fallbackStatus}</div>
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${imapStatus}</div>
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${smtpStatus}</div>
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${telegramStatus}</div>
+          <div style="display:flex; align-items:center; gap:6px; color:#fff;">${scoringStatus}</div>
+        `;
+      } catch (err) {
+        console.error("Error fetching connection matrix:", err);
+      }
+    }
+
     // Initialize Dashboard
     refreshLeads();
+    updateHealthMatrix();
     setInterval(refreshLeads, 6000);
+    setInterval(updateHealthMatrix, 12000);
   </script>
 </body>
 </html>

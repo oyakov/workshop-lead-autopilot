@@ -20,7 +20,7 @@ async def classify_intent(inquiry_text: str) -> str:
     try:
         result = await llm.chat(
             [{"role": "user", "content": INTENT_CLASSIFICATION.format(inquiry=inquiry_text[:500])}],
-            max_tokens=10,
+            max_tokens=1024,
         )
         word = result.strip().lower().split()[0] if result.strip() else "other"
         return word if word in VALID_INTENTS else "other"
@@ -46,7 +46,7 @@ async def score_lead(lead: dict) -> tuple[int, str, str]:
         )
         raw = await llm.chat(
             [{"role": "user", "content": prompt}],
-            max_tokens=150,
+            max_tokens=1024,
         )
 
         # Extract JSON from response
@@ -97,6 +97,14 @@ def _rule_based_score(lead: dict) -> tuple[int, str, str]:
     if lead.get("intent_category") in ("automation", "integration"):
         score += 10
         reasons.append(f"intent={lead['intent_category']}")
+
+    # Apply spam/low-value keywords penalty
+    inquiry_lower = lead.get("inquiry_text", "").lower()
+    spam_keywords = ["free", "no budget", "for free", "job application", "career", "resume", "cv", "seo guest post"]
+    matched_spam = [kw for kw in spam_keywords if kw in inquiry_lower]
+    if matched_spam:
+        score = max(5, score - 40)
+        reasons.append(f"spam/low-value keywords ({', '.join(matched_spam)})")
 
     score = min(score, 100)
     label = _score_to_label(score)

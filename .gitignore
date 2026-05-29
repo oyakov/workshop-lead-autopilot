@@ -6,3 +6,9 @@ __pycache__/
 venv/
 *.egg-info/
 dist/
+.claude/
+.antigravity/
+.cursor/
+.vscode/
+.idea/
+JOURNAL.md

@@ -50,6 +50,15 @@ class CRMAdapter(ABC):
     async def create_task(self, lead: dict, deal_id: str, title: str) -> CRMResult:
         """Create a follow-up task in CRM."""
 
+    async def update_contact_status(self, contact_id: str, status: str) -> bool:
+        """Update contact lead status in CRM. Return True on success."""
+        return True
+
+    async def log_outgoing_email(self, contact_id: str, subject: str, body: str) -> bool:
+        """Log an outgoing email communication against the contact. Return True on success."""
+        return True
+
+
     async def full_upsert(self, lead: dict) -> CRMResult:
         """
         Orchestrate full CRM write: contact → company → deal → task.

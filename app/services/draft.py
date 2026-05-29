@@ -42,7 +42,7 @@ async def generate_draft(lead: dict) -> tuple[str, str]:
         )
         text = await llm.chat(
             [{"role": "user", "content": prompt}],
-            max_tokens=400,
+            max_tokens=2048,
         )
 
         if not text:
@@ -82,7 +82,7 @@ async def generate_followup(lead: dict) -> tuple[str, str]:
         )
         text = await llm.chat(
             [{"role": "user", "content": prompt}],
-            max_tokens=300,
+            max_tokens=2048,
         )
         fallback_subject = f"Following up — {agency}"
         fallback_body = (

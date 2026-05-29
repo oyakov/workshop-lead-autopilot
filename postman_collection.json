@@ -1,0 +1,264 @@
+{
+  "info": {
+    "_postman_id": "4b68db65-4f40-4286-9076-2e865f128cbe",
+    "name": "B2B Autopilot E2E Test Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Intake Lead",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 202', function () {",
+              "    pm.response.to.have.status(202);",
+              "});",
+              "pm.test('Response is JSON', function () {",
+              "    pm.response.to.be.json;",
+              "});",
+              "pm.test('Has lead_id and processing status', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.lead_id).to.be.a('string');",
+              "    pm.expect(jsonData.status).to.eql('processing');",
+              "    pm.collectionVariables.set('lead_id', jsonData.lead_id);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_name\": \"Ivan\",\n  \"last_name\": \"Petrov\",\n  \"email\": \"ivan@techcorp.rs\",\n  \"phone\": \"+38111123456\",\n  \"company_name\": \"Tech Corp\",\n  \"inquiry_text\": \"We need a highly professional custom integration for our HubSpot CRM to prevent hot leads from getting cold. Automation is super important.\",\n  \"source\": \"webform\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:8080/api/v1/leads",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "leads"
+          ]
+        }
+      }
+    },
+    {
+      "name": "2. Get Lead Details",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response contains correct lead information', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.lead_id).to.eql(pm.collectionVariables.get('lead_id'));",
+              "    pm.expect(jsonData.first_name).to.eql('Ivan');",
+              "    pm.expect(jsonData.email).to.eql('ivan@techcorp.rs');",
+              "    pm.expect(jsonData.company_domain).to.eql('techcorp.rs');",
+              "    pm.expect(jsonData.company_name).to.eql('Tech Corp');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/leads/{{lead_id}}",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{{lead_id}}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "3. Approve Lead Response Draft",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has ok: true', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.ok).to.eql(true);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/leads/{{lead_id}}/approve",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{{lead_id}}",
+            "approve"
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. Trigger SLA Breach Check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response has ok: true', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.ok).to.eql(true);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/leads/{{lead_id}}/sla-check",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{{lead_id}}",
+            "sla-check"
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. Get Lead Events Log",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Events list contains entries', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.be.an('array');",
+              "    pm.expect(jsonData.length).to.be.above(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/leads/{{lead_id}}/events",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "leads",
+            "{{lead_id}}",
+            "events"
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. List All Leads Pipeline",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Leads list is retrieved and populated', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.be.an('array');",
+              "    pm.expect(jsonData.length).to.be.above(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:8080/api/v1/leads",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "leads"
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "lead_id",
+      "value": ""
+    }
+  ]
+}

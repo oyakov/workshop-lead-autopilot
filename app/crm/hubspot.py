@@ -38,6 +38,12 @@ class HubSpotAdapter(CRMAdapter):
             r.raise_for_status()
             return r.json()
 
+    async def _patch(self, path: str, body: dict) -> dict:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.patch(f"{BASE}{path}", json=body, headers=self._headers())
+            r.raise_for_status()
+            return r.json()
+
     def _extract_id_from_conflict(self, error_text: str) -> str:
         m = re.search(r'"id"\s*:\s*"(\d+)"', error_text)
         return m.group(1) if m else ""
@@ -59,6 +65,7 @@ class HubSpotAdapter(CRMAdapter):
                 "lastname": lead.get("last_name", ""),
                 "email": lead.get("email", ""),
                 "phone": lead.get("phone", ""),
+                "hs_lead_status": "NEW",
             }})
             return CRMResult(contact_id=res["id"])
         except httpx.HTTPStatusError as e:
@@ -66,6 +73,61 @@ class HubSpotAdapter(CRMAdapter):
                 cid = self._extract_id_from_conflict(e.response.text)
                 return CRMResult(contact_id=cid)
             raise
+
+    async def update_contact_status(self, contact_id: str, status: str) -> bool:
+        if not contact_id:
+            return False
+        hs_status_map = {
+            "new": "NEW",
+            "contacted": "CONNECTED",
+            "qualified": "IN_PROGRESS",
+            "meeting_set": "CONNECTED",
+            "closed_won": "CONNECTED",
+            "closed_lost": "UNQUALIFIED"
+        }
+        hs_status = hs_status_map.get(status, "NEW")
+        try:
+            await self._patch(f"/crm/v3/objects/contacts/{contact_id}", {
+                "properties": {
+                    "hs_lead_status": hs_status
+                }
+            })
+            return True
+        except Exception as e:
+            logger.error("Failed to update HubSpot contact status contact=%s: %s", contact_id, e)
+            return False
+
+    async def log_outgoing_email(self, contact_id: str, subject: str, body: str) -> bool:
+        if not contact_id:
+            return False
+        try:
+            await self._post("/crm/v3/objects/emails", {
+                "properties": {
+                    "hs_email_direction": "EMAIL",
+                    "hs_email_status": "SENT",
+                    "hs_email_subject": subject,
+                    "hs_email_text": body,
+                    "hs_timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+                "associations": [
+                    {
+                        "to": {
+                            "id": contact_id
+                        },
+                        "types": [
+                            {
+                                "associationCategory": "HUBSPOT_DEFINED",
+                                "associationTypeId": "198"
+                            }
+                        ]
+                    }
+                ]
+            })
+            return True
+        except Exception as e:
+            logger.error("Failed to log HubSpot email activity contact=%s: %s", contact_id, e)
+            return False
+
 
     async def upsert_company(self, lead: dict) -> CRMResult:
         if not lead.get("company_domain") and not lead.get("company_name"):

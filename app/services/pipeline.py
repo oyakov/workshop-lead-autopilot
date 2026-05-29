@@ -79,7 +79,14 @@ async def process_lead(raw: dict) -> Lead:
 
     # ── 5. CRM upsert ─────────────────────────────────────────
     crm = get_crm_adapter()
-    if crm.is_configured():
+    score_label = lead_data.get("score_label", "cold")
+    if score_label == "cold":
+        await _log(lead.lead_id, "crm_upsert_skipped", {
+            "reason": "Lead is cold/spam",
+            "score": lead_data.get("score", 0),
+        })
+        logger.info("CRM upsert skipped for cold lead=%s", lead.lead_id)
+    elif crm.is_configured():
         try:
             result = await crm.full_upsert(lead_data)
             if result.ok:
@@ -107,7 +114,6 @@ async def process_lead(raw: dict) -> Lead:
     await leads_repo.update_lead(lead.lead_id, {
         "draft_subject": subject,
         "draft_body": body,
-        "status": "contacted",
         "last_action_at": datetime.now(timezone.utc).isoformat(),
     })
     await _log(lead.lead_id, "draft_generated", {"subject": subject[:80]})

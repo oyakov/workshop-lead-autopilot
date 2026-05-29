@@ -8,12 +8,16 @@ services:
       dockerfile: Dockerfile
     container_name: lead-autopilot
     ports:
-      - "8000:8000"
+      - "8080:8000"
     env_file:
       - .env
     environment:
       # n8n internal network address (overrides .env for inter-container comms)
       - N8N_WEBHOOK_BASE_URL=http://n8n:5678
+      # Override LLM endpoint to reach the host machine from inside Docker!
+      - LLM_BASE_URL=http://host.docker.internal:1234/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       n8n:
         condition: service_healthy
