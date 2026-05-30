@@ -5,8 +5,10 @@ n8n calls these to trigger actions after its own workflow steps.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Header, Depends
+from fastapi.responses import HTMLResponse
 
 from app.db import leads_repo, events_repo
+from app.rate_limit import limiter
 from app.services import alerts
 from app.config import get_settings
 
@@ -48,6 +50,7 @@ async def n8n_email_approved(payload: dict, _: str = Depends(verify_n8n_token)):
 
 
 @router.post("/intake")
+@limiter.limit("30/minute")
 async def generic_webhook_intake(request: Request):
     """
     Generic webhook intake — accepts any JSON payload.
@@ -89,3 +92,33 @@ async def generic_webhook_intake(request: Request):
 
     lead = await process_lead(lead_in.model_dump())
     return {"lead_id": lead.lead_id, "status": "processing"}
+
+
+# ── Unsubscribe ───────────────────────────────────────────────────────────────
+
+@router.get("/unsubscribe", response_class=HTMLResponse, include_in_schema=False)
+async def unsubscribe(token: str = ""):
+    """
+    GDPR/CAN-SPAM unsubscribe endpoint.
+    Token = base64(email).HMAC-SHA256 — signed in make_unsubscribe_url().
+    Any lead matching the email is marked closed_lost + unsubscribed=True.
+    """
+    from app.services.unsubscribe import verify_unsubscribe_token
+    cfg = get_settings()
+    email = verify_unsubscribe_token(token, cfg.secret_key)
+    if not email:
+        return HTMLResponse(
+            "<h2>Invalid or expired unsubscribe link.</h2>",
+            status_code=400,
+        )
+
+    # Find all leads for this email and mark unsubscribed
+    leads = await leads_repo.find_by_email(email)
+    for lead in leads:
+        await leads_repo.update_lead(lead["lead_id"], {"status": "closed_lost"})
+        await events_repo.log_event(lead["lead_id"], "unsubscribed", {"email": email})
+
+    return HTMLResponse(
+        f"<h2>You have been unsubscribed.</h2>"
+        f"<p>Email <b>{email}</b> will no longer receive messages from us.</p>"
+    )

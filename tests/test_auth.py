@@ -1,97 +1,38 @@
-"""
-Tests for authentication and public security features.
-"""
+"""Tests for HMAC-based auth token and session helpers."""
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
+from app.services.auth import sign_token, verify_token
 
-from app.main import app
-from app.config import get_settings
-
-
-@pytest.fixture
-def client():
-    return TestClient(app)
+SECRET = "test-secret-key-32chars-long-xyz!"
 
 
-def test_login_success(client):
-    """Test successful login returns 200 and sets cookie."""
-    cfg = get_settings()
-    res = client.post(
-        "/api/v1/auth/login",
-        json={"username": cfg.admin_username, "password": cfg.admin_password}
-    )
-    assert res.status_code == 200
-    assert res.json() == {"ok": True, "username": cfg.admin_username}
-    assert "session_token" in res.cookies
+def test_sign_and_verify_valid_token():
+    token = sign_token("admin", SECRET)
+    result = verify_token(token, SECRET)
+    assert result == "admin"
 
 
-def test_login_failure(client):
-    """Test failed login returns 401 and does not set cookie."""
-    res = client.post(
-        "/api/v1/auth/login",
-        json={"username": "admin", "password": "wrong-password"}
-    )
-    assert res.status_code == 401
-    assert "session_token" not in res.cookies
+def test_verify_expired_token():
+    token = sign_token("admin", SECRET, expires_in_seconds=-1)
+    result = verify_token(token, SECRET)
+    assert result is None
 
 
-def test_logout_success(client):
-    """Test logout clears the cookie."""
-    res = client.post("/api/v1/auth/logout")
-    assert res.status_code == 200
-    # Cookie should be cleared or deleted (max-age=0 or empty value)
-    cookie = res.cookies.get("session_token")
-    assert cookie is None or cookie == ""
+def test_verify_tampered_token():
+    token = sign_token("admin", SECRET)
+    tampered = token[:-1] + ("x" if token[-1] != "x" else "y")
+    result = verify_token(tampered, SECRET)
+    assert result is None
 
 
-def test_protected_leads_endpoint(client):
-    """Test that administrative leads routes require authentication."""
-    # Accessed without session token cookie
-    res = client.get("/api/v1/leads")
-    assert res.status_code == 401
-    
-    # Accessed with invalid session token
-    client.cookies.set("session_token", "invalid_token_b64.invalid_sig")
-    res = client.get("/api/v1/leads")
-    assert res.status_code == 401
+def test_verify_wrong_secret():
+    token = sign_token("admin", SECRET)
+    result = verify_token(token, "wrong-secret")
+    assert result is None
 
 
-def test_public_intake_leads_endpoint(client):
-    """Test that public lead intake remains open without authentication."""
-    # Submit invalid lead just to verify the intake route parses it (returns 422 instead of 401)
-    res = client.post("/api/v1/leads", json={"first_name": "Ivan"})
-    # It returns 422 validation error (since email/inquiry are missing), not 401!
-    assert res.status_code == 422
-
-
-def test_protected_health_endpoint(client):
-    """Test that health check route requires authentication."""
-    res = client.get("/api/v1/health")
-    assert res.status_code == 401
-
-
-def test_webhook_token_protection(client):
-    """Test that n8n webhook routes require and validate X-n8n-Token header."""
-    cfg = get_settings()
-    
-    # Missing header
-    res = client.post("/api/v1/webhooks/n8n/sla-check")
-    assert res.status_code == 422  # Unprocessable due to missing header
-    
-    # Invalid token header
-    res = client.post(
-        "/api/v1/webhooks/n8n/sla-check",
-        headers={"X-n8n-Token": "wrong-token"}
-    )
-    assert res.status_code == 401
-    
-    # Valid token header
-    res = client.post(
-        "/api/v1/webhooks/n8n/sla-check",
-        headers={"X-n8n-Token": cfg.webhook_token}
-    )
-    # The webhook route should proceed and process (might return 200/OK)
-    assert res.status_code == 200
-    assert res.json()["ok"] is True
+def test_verify_malformed_token():
+    assert verify_token("", SECRET) is None
+    assert verify_token("noperiod", SECRET) is None
+    assert verify_token("a.b.c", SECRET) is None

@@ -2,16 +2,13 @@
 Follow-up service.
 - Configurable auto-send (FOLLOWUP_AUTO_SEND)
 - T+24h: reminder to owner via Telegram
-- T+48h: follow-up email to client (auto or human approval)
+- T+48h: follow-up email #1 to client (auto or human approval)
+- T+72h: follow-up email #2 — final soft touch, then marks lead stale
 """
 from __future__ import annotations
 
 import logging
-import smtplib
-import ssl
 from datetime import datetime, timezone, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 from app.config import get_settings
 from app.db import leads_repo, events_repo
@@ -48,8 +45,16 @@ async def process_followups() -> int:
             await _remind_owner(lead)
             actions += 1
 
-        # T+48h: follow-up email to client
+        # T+48h: follow-up email #1 to client
         elif hours_since >= cfg.followup_client_hours and followup_count == 1:
+            if cfg.followup_auto_send:
+                await _send_followup_email(lead)
+            else:
+                await _request_followup_approval(lead)
+            actions += 1
+
+        # T+72h: follow-up email #2 — final touch
+        elif hours_since >= cfg.followup_final_hours and followup_count == 2:
             if cfg.followup_auto_send:
                 await _send_followup_email(lead)
             else:
@@ -190,15 +195,24 @@ async def approve_and_send(lead_id: str) -> bool:
 
 
 async def _smtp_send(to_email: str, subject: str, body: str) -> None:
-    cfg = get_settings()
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = cfg.smtp_from or cfg.smtp_user
-    msg["To"] = to_email
-    msg.attach(MIMEText(body, "plain", "utf-8"))
+    """Async SMTP send using aiosmtplib — does not block the event loop."""
+    import aiosmtplib
+    from email.message import EmailMessage
 
-    context = ssl.create_default_context()
-    with smtplib.SMTP(cfg.smtp_host, cfg.smtp_port) as server:
-        server.starttls(context=context)
-        server.login(cfg.smtp_user, cfg.smtp_password)
-        server.sendmail(cfg.smtp_from or cfg.smtp_user, to_email, msg.as_string())
+    cfg = get_settings()
+    sender = cfg.smtp_from or cfg.smtp_user
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    await aiosmtplib.send(
+        msg,
+        hostname=cfg.smtp_host,
+        port=cfg.smtp_port,
+        username=cfg.smtp_user,
+        password=cfg.smtp_password,
+        start_tls=True,
+    )

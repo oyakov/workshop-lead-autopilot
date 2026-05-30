@@ -62,10 +62,11 @@ Instructions:
 - First line MUST be: "Subject: <your subject here>"
 - Reference their specific pain point
 - Position {agency_name} as AI automation specialists
-- Propose a 15-minute discovery call
+- Propose a 15-minute discovery call — include this exact booking link: {calendar_link}
 - If hot lead: be more urgent, mention quick timeline
 - If cold lead: be educational, offer a resource or checklist
 - Sign as "The {agency_name} Team"
+- Last line MUST be exactly: "To opt out: {unsubscribe_url}"
 - Be warm but concise, no fluff"""
 
 
@@ -86,6 +87,7 @@ Instructions:
 - First line MUST be: "Subject: <your subject here>"
 - Be brief (2-3 sentences)
 - Add subtle value (tip, case study mention, or question)
-- Include a soft CTA (call link or simple reply)
+- Include booking link: {calendar_link}
 - Do NOT be pushy
-- Sign as "The {agency_name} Team\""""
+- Sign as "The {agency_name} Team"
+- Last line MUST be exactly: "To opt out: {unsubscribe_url}" \""""

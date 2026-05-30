@@ -20,7 +20,7 @@ async def classify_intent(inquiry_text: str) -> str:
     try:
         result = await llm.chat(
             [{"role": "user", "content": INTENT_CLASSIFICATION.format(inquiry=inquiry_text[:500])}],
-            max_tokens=1024,
+            max_tokens=20,  # single-word response — 1024 was wasteful
         )
         word = result.strip().lower().split()[0] if result.strip() else "other"
         return word if word in VALID_INTENTS else "other"

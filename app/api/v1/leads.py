@@ -1,10 +1,9 @@
 """Leads API — CRUD + pipeline actions."""
-from __future__ import annotations
-
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request, Body
 
 from app.db import events_repo, leads_repo
 from app.models.lead import LeadIn
+from app.rate_limit import limiter
 from app.services import followup as followup_svc
 from app.services.pipeline import process_lead
 from app.services.sla import check_sla
@@ -14,7 +13,8 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 
 
 @router.post("", status_code=202)
-async def intake_lead(lead_in: LeadIn):
+@limiter.limit("30/minute")
+async def intake_lead(request: Request, lead_in: LeadIn = Body(...)):
     """Submit a new lead for processing."""
     lead = await process_lead(lead_in.model_dump())
     return {

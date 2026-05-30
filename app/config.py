@@ -4,12 +4,14 @@ All values read from environment / .env file.
 """
 from __future__ import annotations
 
-import os
+import logging
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -72,6 +74,10 @@ class Settings(BaseSettings):
     followup_auto_send: bool = True
     sla_hours: int = 24
     followup_client_hours: int = 48
+    followup_final_hours: int = 72   # T+72h: 3rd and final touch
+
+    # ── Outreach ──────────────────────────────────────────
+    calendar_link: str = ""          # e.g. https://cal.com/yourname/15min
 
     # ── Telegram ─────────────────────────────────────────
     telegram_enabled: bool = False
@@ -100,6 +106,28 @@ class Settings(BaseSettings):
     scoring_enabled: bool = True
     score_hot_threshold: int = 70
     score_warm_threshold: int = 40
+
+
+    @model_validator(mode="after")
+    def _warn_insecure_defaults(self) -> "Settings":
+        _INSECURE = {"change-me-in-production", "changeme"}
+        if self.environment == "production":
+            if self.secret_key in _INSECURE:
+                raise ValueError("SECRET_KEY must be set to a strong random value in production.")
+            if self.webhook_token in {"n8n_secret_token_change_me"}:
+                raise ValueError("WEBHOOK_TOKEN must be changed from the default in production.")
+        else:
+            if self.secret_key in _INSECURE:
+                logger.warning(
+                    "SECRET_KEY is using an insecure default. "
+                    "Set SECRET_KEY env var before deploying to production."
+                )
+            if self.webhook_token in {"n8n_secret_token_change_me"}:
+                logger.warning(
+                    "WEBHOOK_TOKEN is using an insecure default. "
+                    "Set WEBHOOK_TOKEN env var before deploying to production."
+                )
+        return self
 
 
 @lru_cache(maxsize=1)

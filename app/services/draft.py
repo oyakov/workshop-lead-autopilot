@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 
 from app.config import get_settings
 from app.llm import gateway as llm
 from app.llm.prompts import DRAFT_REPLY, FOLLOWUP_EMAIL
+from app.services.unsubscribe import make_unsubscribe_url
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +20,16 @@ async def generate_draft(lead: dict) -> tuple[str, str]:
     """
     cfg = get_settings()
     agency = cfg.agency_name
+    calendar = cfg.calendar_link or "https://calendly.com/yourname/15min"
+    unsub_url = make_unsubscribe_url(lead.get("email", ""), cfg.secret_key)
 
     fallback_subject = f"Re: Your inquiry — {lead.get('first_name', 'there')}"
     fallback_body = (
         f"Hi {lead.get('first_name', 'there')},\n\n"
         f"Thanks for reaching out! We specialise in automating exactly "
         f"the kind of workflows you described.\n"
-        f"Would you be open to a quick 15-min call this week?\n\n"
-        f"Best,\nThe {agency} Team"
+        f"Would you be open to a quick 15-min call? Book here: {calendar}\n\n"
+        f"Best,\nThe {agency} Team\n\nTo opt out: {unsub_url}"
     )
 
     try:
@@ -39,6 +41,8 @@ async def generate_draft(lead: dict) -> tuple[str, str]:
             inquiry_text=lead.get("inquiry_text", "")[:400],
             intent_category=lead.get("intent_category", "other"),
             score_label=lead.get("score_label", "unknown"),
+            calendar_link=calendar,
+            unsubscribe_url=unsub_url,
         )
         text = await llm.chat(
             [{"role": "user", "content": prompt}],
@@ -63,6 +67,8 @@ async def generate_followup(lead: dict) -> tuple[str, str]:
     from datetime import datetime, timezone
     cfg = get_settings()
     agency = cfg.agency_name
+    calendar = cfg.calendar_link or "https://calendly.com/yourname/15min"
+    unsub_url = make_unsubscribe_url(lead.get("email", ""), cfg.secret_key)
 
     try:
         last_action = lead.get("last_action_at", "")
@@ -79,6 +85,8 @@ async def generate_followup(lead: dict) -> tuple[str, str]:
             inquiry_text=lead.get("inquiry_text", "")[:300],
             days_since_contact=days,
             followup_count=lead.get("followup_count", 1),
+            calendar_link=calendar,
+            unsubscribe_url=unsub_url,
         )
         text = await llm.chat(
             [{"role": "user", "content": prompt}],
@@ -88,8 +96,8 @@ async def generate_followup(lead: dict) -> tuple[str, str]:
         fallback_body = (
             f"Hi {lead.get('first_name','there')},\n\n"
             f"Just checking in on our previous message. Happy to answer "
-            f"any questions or find a time for a quick call.\n\n"
-            f"Best,\nThe {agency} Team"
+            f"any questions or find a time for a quick call: {calendar}\n\n"
+            f"Best,\nThe {agency} Team\n\nTo opt out: {unsub_url}"
         )
         if not text:
             return fallback_subject, fallback_body

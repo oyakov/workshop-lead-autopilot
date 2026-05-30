@@ -1,65 +1,51 @@
 version: "3.9"
 
 services:
-  # ── Lead Autopilot App ─────────────────────────────────────
+  # ── Main application ───────────────────────────────────────────────────────
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: lead-autopilot
+    build: .
     ports:
-      - "8080:8000"
+      - "8000:8000"
     env_file:
       - .env
     environment:
-      # n8n internal network address (overrides .env for inter-container comms)
-      - N8N_WEBHOOK_BASE_URL=http://n8n:5678
-      # LLM endpoint interpolated from .env
-      - LLM_BASE_URL=${LLM_BASE_URL}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - ENVIRONMENT=development
     depends_on:
-      n8n:
-        condition: service_healthy
-    restart: unless-stopped
-    volumes:
-      - ./app/static:/app/app/static:ro
-    networks:
-      - autopilot
-
-  # ── n8n Workflow Automation ───────────────────────────────
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: lead-autopilot-n8n
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
-      - N8N_HOST=n8n
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Europe/Berlin
-      # n8n calls back to app using internal Docker network
-      - APP_BASE_URL=http://app:8000
-    volumes:
-      - n8n_data:/home/node/.n8n
+      - redis
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
+      test: ["CMD", "python", "-c", "import httpx, sys; sys.exit(0 if httpx.get('http://localhost:8000/api/v1/healthz').status_code==200 else 1)"]
       interval: 15s
       timeout: 5s
+      retries: 3
+
+  # ── Redis (rate limiter persistent storage for production) ─────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
       retries: 5
-      start_period: 30s
-    networks:
-      - autopilot
 
-networks:
-  autopilot:
-    driver: bridge
-
-volumes:
-  n8n_data:
-    driver: local
+  # ── Test runner (e2e) ──────────────────────────────────────────────────────
+  test:
+    build: .
+    command: >
+      sh -c "python -m pytest tests/ -v --tb=short --no-header"
+    env_file:
+      - .env.test
+    environment:
+      - ENVIRONMENT=development
+      - SECRET_KEY=test-secret-key-long-enough-32ch
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=testpass123
+      - CRM_PROVIDER=none
+      - LLM_PROVIDER=lmstudio
+      - SUPABASE_URL=
+      - SUPABASE_KEY=
+    profiles:
+      - test

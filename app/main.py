@@ -17,12 +17,15 @@ load_dotenv()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api import v1_router
 from app.config import get_settings
+from app.rate_limit import limiter
 
 
 def verify_session_cookie(request: Request) -> bool:
@@ -33,6 +36,7 @@ def verify_session_cookie(request: Request) -> bool:
         return False
     cfg = get_settings()
     return verify_token(token, cfg.secret_key) is not None
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +79,15 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
     logger.info("Scheduler stopped.")
 
+    # Close persistent CRM HTTP client pool
+    from app.crm.factory import get_crm_adapter
+    try:
+        adapter = get_crm_adapter()
+        if hasattr(adapter, "close"):
+            await adapter.close()
+    except Exception:
+        pass
+
 
 app = FastAPI(
     title="Lead-to-CRM Autopilot",
@@ -83,9 +96,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Attach rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],   # TODO: restrict to known origins before production deploy
     allow_methods=["*"],
     allow_headers=["*"],
 )
