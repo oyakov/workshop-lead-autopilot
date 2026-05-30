@@ -4,16 +4,24 @@ n8n calls these to trigger actions after its own workflow steps.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Header, Depends
 
 from app.db import leads_repo, events_repo
 from app.services import alerts
+from app.config import get_settings
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
+def verify_n8n_token(x_n8n_token: str = Header(..., alias="X-n8n-Token")):
+    """Verify that n8n webhook requests supply the correct secure secret token."""
+    cfg = get_settings()
+    if x_n8n_token != cfg.webhook_token:
+        raise HTTPException(status_code=401, detail="Invalid n8n webhook token")
+
+
 @router.post("/n8n/followup-trigger")
-async def n8n_followup_trigger():
+async def n8n_followup_trigger(_: str = Depends(verify_n8n_token)):
     """Called by n8n Follow-up Scheduler workflow."""
     from app.services.followup import process_followups
     count = await process_followups()
@@ -21,7 +29,7 @@ async def n8n_followup_trigger():
 
 
 @router.post("/n8n/sla-check")
-async def n8n_sla_check():
+async def n8n_sla_check(_: str = Depends(verify_n8n_token)):
     """Called by n8n SLA Monitor workflow."""
     from app.services.sla import check_sla
     breached = await check_sla()
@@ -29,7 +37,7 @@ async def n8n_sla_check():
 
 
 @router.post("/n8n/email-approved")
-async def n8n_email_approved(payload: dict):
+async def n8n_email_approved(payload: dict, _: str = Depends(verify_n8n_token)):
     """Called by n8n when email approval is confirmed via Telegram bot."""
     lead_id = payload.get("lead_id")
     if not lead_id:

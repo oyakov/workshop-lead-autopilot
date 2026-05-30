@@ -3,20 +3,25 @@ from __future__ import annotations
 
 import logging
 
-import httpx
-
 from app.config import get_settings
-from app.crm.base import CRMAdapter, CRMResult
+from app.crm.base import BaseHttpCRMAdapter, CRMResult
 
 logger = logging.getLogger(__name__)
 
 BASE = "https://{domain}.pipedrive.com/api/v1"
 
 
-class PipedriveAdapter(CRMAdapter):
+class PipedriveAdapter(BaseHttpCRMAdapter):
+
+    def __init__(self) -> None:
+        super().__init__()
 
     def _base(self) -> str:
         return BASE.format(domain=get_settings().pipedrive_company_domain)
+
+    def _headers(self) -> dict:
+        # Pipedrive uses API token in query params, not headers, but base method requires this.
+        return {}
 
     def _params(self) -> dict:
         return {"api_token": get_settings().pipedrive_api_key}
@@ -26,24 +31,20 @@ class PipedriveAdapter(CRMAdapter):
         return bool(cfg.pipedrive_api_key and cfg.pipedrive_company_domain)
 
     async def upsert_contact(self, lead: dict) -> CRMResult:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{self._base()}/persons", params=self._params(), json={
-                "name": f"{lead.get('first_name','')} {lead.get('last_name','')}".strip(),
-                "email": [{"value": lead.get("email", ""), "primary": True}],
-                "phone": [{"value": lead.get("phone", ""), "primary": True}],
-            })
-            r.raise_for_status()
-            return CRMResult(contact_id=str(r.json()["data"]["id"]))
+        r = await self._request("POST", f"{self._base()}/persons", params=self._params(), json={
+            "name": f"{lead.get('first_name','')} {lead.get('last_name','')}".strip(),
+            "email": [{"value": lead.get("email", ""), "primary": True}],
+            "phone": [{"value": lead.get("phone", ""), "primary": True}],
+        })
+        return CRMResult(contact_id=str(r.json()["data"]["id"]))
 
     async def upsert_company(self, lead: dict) -> CRMResult:
         if not lead.get("company_name"):
             return CRMResult()
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{self._base()}/organizations", params=self._params(), json={
-                "name": lead.get("company_name", ""),
-            })
-            r.raise_for_status()
-            return CRMResult(company_id=str(r.json()["data"]["id"]))
+        r = await self._request("POST", f"{self._base()}/organizations", params=self._params(), json={
+            "name": lead.get("company_name", ""),
+        })
+        return CRMResult(company_id=str(r.json()["data"]["id"]))
 
     async def upsert_deal(
         self, lead: dict, contact_id: str = "", company_id: str = ""
@@ -57,10 +58,8 @@ class PipedriveAdapter(CRMAdapter):
         if company_id:
             payload["org_id"] = int(company_id)
 
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{self._base()}/deals", params=self._params(), json=payload)
-            r.raise_for_status()
-            return CRMResult(deal_id=str(r.json()["data"]["id"]))
+        r = await self._request("POST", f"{self._base()}/deals", params=self._params(), json=payload)
+        return CRMResult(deal_id=str(r.json()["data"]["id"]))
 
     async def create_task(self, lead: dict, deal_id: str, title: str) -> CRMResult:
         from datetime import datetime, timedelta, timezone
@@ -73,7 +72,5 @@ class PipedriveAdapter(CRMAdapter):
         }
         if deal_id:
             payload["deal_id"] = int(deal_id)
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{self._base()}/activities", params=self._params(), json=payload)
-            r.raise_for_status()
-            return CRMResult(task_id=str(r.json()["data"]["id"]))
+        r = await self._request("POST", f"{self._base()}/activities", params=self._params(), json=payload)
+        return CRMResult(task_id=str(r.json()["data"]["id"]))

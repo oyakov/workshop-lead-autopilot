@@ -15,14 +15,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.api import v1_router
 from app.config import get_settings
+
+
+def verify_session_cookie(request: Request) -> bool:
+    """Check if the request contains a valid cryptographically-signed session cookie."""
+    from app.services.auth import verify_token
+    token = request.cookies.get("session_token")
+    if not token:
+        return False
+    cfg = get_settings()
+    return verify_token(token, cfg.secret_key) is not None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -83,10 +93,19 @@ app.add_middleware(
 # ── API routes ────────────────────────────────────────────────
 app.include_router(v1_router)
 
-# ── Static dashboard ──────────────────────────────────────────
+# ── Static dashboard protection ───────────────────────────────
+@app.get("/static/index.html", response_class=FileResponse, include_in_schema=False)
+async def static_index(request: Request):
+    if not verify_session_cookie(request):
+        return RedirectResponse(url="/static/login.html")
+    return FileResponse("app/static/index.html")
+
+
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.get("/", response_class=FileResponse, include_in_schema=False)
-async def root():
+async def root(request: Request):
+    if not verify_session_cookie(request):
+        return RedirectResponse(url="/static/login.html")
     return FileResponse("app/static/index.html")

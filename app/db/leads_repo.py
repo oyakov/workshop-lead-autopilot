@@ -4,13 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from app.db import mock_db
 from app.db.client import get_supabase
 from app.models.lead import Lead
 
 TABLE = "leads"
-
-# Local in-memory store for fallback execution (e.g. testing or local desktop run without Supabase credentials)
-_in_memory_leads: dict[str, dict] = {}
 
 
 def _now_iso() -> str:
@@ -23,15 +21,21 @@ async def save_lead(lead: Lead) -> None:
     data = lead.model_dump()
     data["updated_at"] = _now_iso()
     if sb is None:
-        _in_memory_leads[lead.lead_id] = data
+        mock_db.leads[lead.lead_id] = data
         return
+    
+    # For Supabase PostgreSQL, convert empty string timestamps to None
+    for field in ["next_action_due_at", "followup_last_at", "last_action_at"]:
+        if data.get(field) == "":
+            data[field] = None
+            
     await sb.table(TABLE).upsert(data).execute()
 
 
 async def get_lead(lead_id: str) -> dict | None:
     sb = await get_supabase()
     if sb is None:
-        return _in_memory_leads.get(lead_id)
+        return mock_db.leads.get(lead_id)
     res = await sb.table(TABLE).select("*").eq("lead_id", lead_id).maybe_single().execute()
     return res.data
 
@@ -45,7 +49,7 @@ async def list_leads(
 ) -> list[dict]:
     sb = await get_supabase()
     if sb is None:
-        leads = list(_in_memory_leads.values())
+        leads = list(mock_db.leads.values())
         leads.sort(key=lambda l: l.get("created_at", ""), reverse=True)
         if status:
             leads = [l for l in leads if l.get("status") == status]
@@ -72,10 +76,16 @@ async def update_lead(lead_id: str, updates: dict[str, Any]) -> None:
     sb = await get_supabase()
     updates["updated_at"] = _now_iso()
     if sb is None:
-        if lead_id in _in_memory_leads:
-            _in_memory_leads[lead_id].update(updates)
+        if lead_id in mock_db.leads:
+            mock_db.leads[lead_id].update(updates)
         return
-    await sb.table(TABLE).update(updates).eq("lead_id", lead_id).execute()
+        
+    cleaned = dict(updates)
+    for field in ["next_action_due_at", "followup_last_at", "last_action_at"]:
+        if field in cleaned and cleaned[field] == "":
+            cleaned[field] = None
+            
+    await sb.table(TABLE).update(cleaned).eq("lead_id", lead_id).execute()
 
 
 async def find_by_email(email: str) -> list[dict]:
@@ -83,7 +93,7 @@ async def find_by_email(email: str) -> list[dict]:
     if sb is None:
         return [
             {"lead_id": l["lead_id"], "email": l["email"], "status": l["status"], "created_at": l["created_at"]}
-            for l in _in_memory_leads.values() 
+            for l in mock_db.leads.values() 
             if l.get("email") == email
         ]
     res = await sb.table(TABLE).select("lead_id,email,status,created_at").eq("email", email).execute()
@@ -97,7 +107,7 @@ async def find_by_domain(domain: str) -> list[dict]:
     if sb is None:
         return [
             {"lead_id": l["lead_id"], "email": l["email"], "company_domain": l["company_domain"], "status": l["status"]}
-            for l in _in_memory_leads.values() 
+            for l in mock_db.leads.values() 
             if l.get("company_domain") == domain
         ]
     res = await sb.table(TABLE).select("lead_id,email,company_domain,status").eq("company_domain", domain).execute()

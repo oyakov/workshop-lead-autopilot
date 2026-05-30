@@ -5,17 +5,18 @@ import re
 import logging
 from datetime import datetime, timezone
 
-import httpx
-
 from app.config import get_settings
-from app.crm.base import CRMAdapter, CRMResult
+from app.crm.base import BaseHttpCRMAdapter, CRMResult
 
 logger = logging.getLogger(__name__)
 
 BASE = "https://api.hubapi.com"
 
 
-class HubSpotAdapter(CRMAdapter):
+class HubSpotAdapter(BaseHttpCRMAdapter):
+
+    def __init__(self) -> None:
+        super().__init__()
 
     def is_configured(self) -> bool:
         return len(get_settings().hubspot_token) > 20
@@ -27,22 +28,16 @@ class HubSpotAdapter(CRMAdapter):
         }
 
     async def _post(self, path: str, body: dict) -> dict:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{BASE}{path}", json=body, headers=self._headers())
-            r.raise_for_status()
-            return r.json()
+        r = await self._request("POST", f"{BASE}{path}", json=body)
+        return r.json()
 
     async def _put(self, path: str, body: list) -> dict:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.put(f"{BASE}{path}", json=body, headers=self._headers())
-            r.raise_for_status()
-            return r.json()
+        r = await self._request("PUT", f"{BASE}{path}", json=body)
+        return r.json()
 
     async def _patch(self, path: str, body: dict) -> dict:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.patch(f"{BASE}{path}", json=body, headers=self._headers())
-            r.raise_for_status()
-            return r.json()
+        r = await self._request("PATCH", f"{BASE}{path}", json=body)
+        return r.json()
 
     def _extract_id_from_conflict(self, error_text: str) -> str:
         m = re.search(r'"id"\s*:\s*"(\d+)"', error_text)
@@ -157,7 +152,6 @@ class HubSpotAdapter(CRMAdapter):
             "dealstage": "appointmentscheduled",
             "pipeline": "default",
             "description": lead.get("inquiry_text", "")[:500],
-            "hs_lead_status": "NEW",
         }})
         deal_id = res["id"]
 

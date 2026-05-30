@@ -1,4 +1,7 @@
 # Caddyfile — Production Reverse Proxy with automatic HTTPS/SSL
+{
+    email oleg@tech-agency.com
+}
 
 # Lead-Autopilot App Dashboard & API
 vestint.duckdns.org {

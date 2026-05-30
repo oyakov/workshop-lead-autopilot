@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     agency_name: str = "Workshop"
     environment: Literal["development", "production"] = "development"
     secret_key: str = "change-me-in-production"
+    admin_username: str = "admin"
+    admin_password: str = "vestint-secure-autopilot-2026"
+    webhook_token: str = "n8n_secret_token_change_me"
 
     # ── Supabase ─────────────────────────────────────────
     supabase_url: str = ""

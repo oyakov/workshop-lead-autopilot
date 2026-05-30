@@ -1,13 +1,14 @@
 """Leads API — CRUD + pipeline actions."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 
 from app.db import events_repo, leads_repo
 from app.models.lead import LeadIn
 from app.services import followup as followup_svc
 from app.services.pipeline import process_lead
 from app.services.sla import check_sla
+from app.services.auth import verify_session
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -29,6 +30,7 @@ async def list_leads(
     overdue: bool = Query(False),
     sla_breached: bool = Query(False),
     limit: int = Query(200, ge=1, le=1000),
+    _: str = Depends(verify_session),
 ):
     """List leads with optional filters."""
     return await leads_repo.list_leads(
@@ -40,7 +42,7 @@ async def list_leads(
 
 
 @router.get("/{lead_id}")
-async def get_lead(lead_id: str):
+async def get_lead(lead_id: str, _: str = Depends(verify_session)):
     lead = await leads_repo.get_lead(lead_id)
     if not lead:
         raise HTTPException(404, f"Lead {lead_id!r} not found")
@@ -48,13 +50,13 @@ async def get_lead(lead_id: str):
 
 
 @router.get("/{lead_id}/events")
-async def get_lead_events(lead_id: str):
+async def get_lead_events(lead_id: str, _: str = Depends(verify_session)):
     """Get full event log for a lead."""
     return await events_repo.get_events(lead_id)
 
 
 @router.post("/{lead_id}/approve")
-async def approve_lead_draft(lead_id: str):
+async def approve_lead_draft(lead_id: str, _: str = Depends(verify_session)):
     """Approve the generated draft and send it."""
     ok = await followup_svc.approve_and_send(lead_id)
     if not ok:
@@ -63,7 +65,7 @@ async def approve_lead_draft(lead_id: str):
 
 
 @router.post("/{lead_id}/followup")
-async def trigger_followup(lead_id: str):
+async def trigger_followup(lead_id: str, _: str = Depends(verify_session)):
     """Manually trigger follow-up processing for a single lead."""
     lead = await leads_repo.get_lead(lead_id)
     if not lead:
@@ -74,7 +76,7 @@ async def trigger_followup(lead_id: str):
 
 
 @router.post("/{lead_id}/sla-check")
-async def manual_sla_check(lead_id: str):
+async def manual_sla_check(lead_id: str, _: str = Depends(verify_session)):
     """Demo/test: manually trigger SLA breach check."""
     from datetime import datetime, timezone
     await leads_repo.update_lead(lead_id, {
@@ -85,7 +87,7 @@ async def manual_sla_check(lead_id: str):
 
 
 @router.patch("/{lead_id}/status")
-async def update_status(lead_id: str, status: str):
+async def update_status(lead_id: str, status: str, _: str = Depends(verify_session)):
     """Update lead status."""
     from app.models.lead import LeadStatus
     valid = {"new", "contacted", "qualified", "meeting_set", "closed_won", "closed_lost"}

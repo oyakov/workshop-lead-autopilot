@@ -1,12 +1,17 @@
-"""Health check endpoint."""
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.config import get_settings
+from app.services.auth import verify_session
 
 router = APIRouter()
 
 
+@router.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
 @router.get("/health")
-async def health():
+async def health(_: str = Depends(verify_session)):
     cfg = get_settings()
     return {
         "status": "ok",
@@ -22,3 +27,4 @@ async def health():
         "scoring": cfg.scoring_enabled,
         "followup_auto": cfg.followup_auto_send,
     }
+

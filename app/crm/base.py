@@ -1,8 +1,13 @@
 """Abstract CRM adapter — all CRM connectors must implement this interface."""
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+
+import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -93,6 +98,51 @@ class CRMAdapter(ABC):
             pass  # task is optional
 
         return result
+
+
+class BaseHttpCRMAdapter(CRMAdapter, ABC):
+    """
+    Base HTTP CRM Adapter that manages a single, persistent httpx.AsyncClient.
+    Provides automated connection pooling, common logging, and request logic.
+    """
+
+    def __init__(self) -> None:
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=15)
+        return self._client
+
+    @abstractmethod
+    def _headers(self) -> dict:
+        """Return authorization and content type headers."""
+
+    async def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """
+        Execute an HTTP request with uniform timeouts, pooling, and logging.
+        """
+        client = self._get_client()
+        headers = self._headers()
+        if "headers" in kwargs:
+            headers = {**headers, **kwargs.pop("headers")}
+
+        logger.debug("CRM HTTP Request %s %s with kwargs %s", method, url, kwargs)
+        try:
+            r = await client.request(method, url, headers=headers, **kwargs)
+            r.raise_for_status()
+            return r
+        except httpx.HTTPStatusError as e:
+            logger.error("CRM HTTP Error %s %s [Status %d]: %s", method, url, e.response.status_code, e.response.text)
+            raise
+        except Exception as e:
+            logger.error("CRM Network/Connection Error %s %s: %s", method, url, e)
+            raise
+
+    async def close(self) -> None:
+        """Close the underlying client pool."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
 
 
 class _NullAdapter(CRMAdapter):

@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 from app.config import get_settings
 from app.db import leads_repo, events_repo
 from app.services import alerts, draft as draft_svc
+from app.services.utils import parse_iso_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +36,8 @@ async def process_followups() -> int:
         if not last_action_iso:
             continue
         try:
-            last_dt = datetime.fromisoformat(last_action_iso.replace("Z", "+00:00"))
-        except ValueError:
+            last_dt = parse_iso_datetime(last_action_iso)
+        except Exception:
             continue
 
         hours_since = (now - last_dt).total_seconds() / 3600
