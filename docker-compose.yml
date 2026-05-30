@@ -1,51 +1,134 @@
 version: "3.9"
 
+# ── Shared network ─────────────────────────────────────────────────────────────
+networks:
+  internal:
+    driver: bridge
+
+# ── Persistent volumes ─────────────────────────────────────────────────────────
+volumes:
+  redis_data:
+  n8n_data:
+  certbot_conf:
+  certbot_www:
+
 services:
-  # ── Main application ───────────────────────────────────────────────────────
+
+  # ── FastAPI application ────────────────────────────────────────────────────
   app:
     build: .
-    ports:
-      - "8000:8000"
+    restart: unless-stopped
     env_file:
       - .env
-    environment:
-      - ENVIRONMENT=development
     depends_on:
-      - redis
-    restart: unless-stopped
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx, sys; sys.exit(0 if httpx.get('http://localhost:8000/api/v1/healthz').status_code==200 else 1)"]
+      test: ["CMD", "python", "-c",
+             "import urllib.request, sys; urllib.request.urlopen('http://localhost:8000/api/v1/healthz'); sys.exit(0)"]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 10s
+    # Not exposed publicly — nginx proxies to it
+    expose:
+      - "8000"
 
-  # ── Redis (rate limiter persistent storage for production) ─────────────────
+  # ── n8n workflow engine ────────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - N8N_HOST=vestint-n8n.duckdns.org
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://vestint-n8n.duckdns.org/
+      - N8N_EDITOR_BASE_URL=https://vestint-n8n.duckdns.org/
+      - GENERIC_TIMEZONE=Europe/Belgrade
+      # Persist data in volume
+      - N8N_USER_FOLDER=/home/node/.n8n
+      # Basic auth for n8n UI (set in .env)
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE:-true}
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-changeme}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - internal
+    expose:
+      - "5678"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Redis — rate limiter + optional task queue ─────────────────────────────
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
 
-  # ── Test runner (e2e) ──────────────────────────────────────────────────────
+  # ── Nginx — reverse proxy + SSL termination ────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+      # Local cert mount for init-ssl.sh temp certs
+      - ./certbot/conf:/etc/letsencrypt
+    networks:
+      - internal
+    depends_on:
+      - app
+      - n8n
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Certbot — certificate issuance & renewal ───────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done"
+    profiles:
+      - production   # only run in production mode
+
+  # ── Test runner (CI / docker-compose --profile test) ──────────────────────
   test:
     build: .
-    command: >
-      sh -c "python -m pytest tests/ -v --tb=short --no-header"
+    command: python -m pytest tests/ -v --tb=short --no-header
     env_file:
       - .env.test
-    environment:
-      - ENVIRONMENT=development
-      - SECRET_KEY=test-secret-key-long-enough-32ch
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=testpass123
-      - CRM_PROVIDER=none
-      - LLM_PROVIDER=lmstudio
-      - SUPABASE_URL=
-      - SUPABASE_KEY=
+    networks:
+      - internal
+    depends_on:
+      - redis
     profiles:
       - test

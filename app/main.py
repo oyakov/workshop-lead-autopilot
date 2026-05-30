@@ -100,11 +100,13 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+cfg_for_cors = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # TODO: restrict to known origins before production deploy
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cfg_for_cors.allowed_origins_list,
+    allow_credentials=cfg_for_cors.allowed_origins_list != ["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-n8n-Token"],
 )
 
 # ── API routes ────────────────────────────────────────────────

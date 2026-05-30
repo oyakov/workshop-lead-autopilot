@@ -107,6 +107,17 @@ class Settings(BaseSettings):
     score_hot_threshold: int = 70
     score_warm_threshold: int = 40
 
+    # ── CORS ──────────────────────────────────────────────
+    # Comma-separated. Use "*" for local dev; set explicit domains in production.
+    # Example: https://vestint.duckdns.org,https://app.yourcompany.com
+    allowed_origins: str = "*"
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        if self.allowed_origins.strip() == "*":
+            return ["*"]
+        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+
 
     @model_validator(mode="after")
     def _warn_insecure_defaults(self) -> "Settings":
